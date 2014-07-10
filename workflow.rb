@@ -144,6 +144,7 @@ module GEO
 
     log :differential, "Running differential for #{ dataset } -- #{Misc.fingerprint [main, contrast]}"
     matrix.differential main, contrast, path
+    nil
   end
   export_asynchronous :differential
 
