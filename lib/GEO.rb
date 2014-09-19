@@ -253,8 +253,8 @@ module GEO
 
       Log.medium "Producing code file for #{ platform }"
       codes = TSV.open stream, :fix => proc{|l| l =~ /^!platform_table_end/i ? nil : l}, :header_hash => ""
+      Log.tsv codes
       Log.low "Original fields: #{codes.key_field} - #{codes.fields * ", "}"
-      stream.force_close
 
       best_field, all_new_fields, order = guess_id(Organism.organism(info[:organism]), codes)
 
@@ -267,7 +267,7 @@ module GEO
 
       Log.low "New fields: #{codes.key_field} - #{codes.fields * ", "}"
 
-      Open.write(code_file, codes.reorder(:key, order).to_s(:sort, true))
+      Open.write(code_file, codes.reorder(:key, order).to_s(:sort))
       Open.write(info_file, info.to_yaml)
 
       info
@@ -308,15 +308,16 @@ module GEO
       info[:data_directory] = directory
 
       info[:subsets] = dataset_subsets(stream)
+      platform = info[:platform]
 
       Log.medium "Producing values file for #{ dataset }"
-      values = TSV.open stream, :fix => proc{|l| l =~ /^!dataset_table_end/i ? nil : l.gsub(/null/,'NA')}, :header_hash => ""
-      key_field = TSV.parse_header(GEO[info[:platform]]['codes'].open).key_field
+      values = TSV.open stream, :fix => proc{|l| l =~ /^!dataset_table_end/i ? nil : l.gsub(/null/,'NA')}, :header_hash => "", :type => :list
+      key_field = TSV.parse_header(GEO[platform].codes.produce.find).key_field
       values.key_field = key_field
 
       samples = values.fields.select{|f| f =~ /GSM/}
 
-      Open.write(value_file, values.slice(samples).to_s(:sort, true))
+      Open.write(value_file, values.slice(samples).to_s(:sort))
       Open.write(info_file, info.to_yaml)
 
       info
@@ -377,7 +378,8 @@ module GEO
       info[:value_type] ||= sample_info.values.first[:value_type]
 
 
-      Open.write(value_file, values.to_s)
+      txt = values.dumper_stream.read
+      Open.write(value_file, txt)
       Open.write(info_file, info.to_yaml)
 
       info
