@@ -255,7 +255,7 @@ module GEO
       codes = TSV.open stream, :fix => proc{|l| l =~ /^!platform_table_end/i ? nil : l}, :header_hash => ""
       Log.low "Original fields: #{codes.key_field} - #{codes.fields * ", "}"
 
-      best_field, all_new_fields, order = guess_id(Organism.organism(info[:organism]), codes)
+      best_field, all_new_fields, order = guess_id(Organism.default_code(Organism.organism(info[:organism])), codes)
 
       new_key_field, *new_fields = all_new_fields
 

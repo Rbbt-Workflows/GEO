@@ -11,7 +11,7 @@ module GEO
   extend Workflow
 
   helper :organism do
-    "Hsa"
+    Organism.default_code("Hsa")
   end
 
   helper :dataset_info do |dataset|
@@ -140,10 +140,23 @@ module GEO
     raise ParameterException, "No dataset provided" if dataset.nil?
     matrix = matrix dataset
 
+    if main and main[0] == "/"
+      info = dataset_info(dataset) 
+      re = Regexp.new(main[1..-2])
+      main = info[:sample_info].select{|k,v| v[:title] =~ re}.collect{|k,v| k}
+    end
+
+    if contrast and contrast[0] == "/"
+      info = dataset_info(dataset) 
+      re = Regexp.new(contrast[1..-2])
+      contrast = info[:sample_info].select{|k,v| v[:title] =~ re}.collect{|k,v| k}
+    end
+
     matrix = matrix_to_gene matrix, dataset if to_gene
 
     log :differential, "Running differential for #{ dataset } -- #{Misc.fingerprint [main, contrast]}"
-    matrix.differential main, contrast, path
+    matrix.differential main, contrast, file(:result)
+    FileUtils.mv file(:result), path
     nil
   end
   export_asynchronous :differential

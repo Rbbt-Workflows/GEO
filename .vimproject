@@ -2,14 +2,6 @@ GEO=/$PWD filter="*"{
  workflow.rb
  lib=lib{
   GEO.rb
-  expression=expression{
-   matrix.rb
-   matrix=matrix{
-    differential.rb
-    barcode.rb
-   }
-   matrix.rb.old
-  }
  }
  share=share{
   R=R{
