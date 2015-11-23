@@ -6,6 +6,7 @@ require 'GEO'
 require 'rbbt/matrix'
 require 'rbbt/matrix/differential'
 require 'rbbt/matrix/barcode'
+require 'rbbt/statistics/random_walk'
 
 module GEO
   extend Workflow
@@ -57,24 +58,48 @@ module GEO
       data = GEO[dataset].values 
 
       log :matrix, "Setting matrix for #{ dataset }"
-      Matrix.new data.find.produce, samples, value_type, format
+      matrix = Matrix.new data.find.produce, samples, value_type, format
+      matrix.subsets = dataset_info(dataset)[:subsets]
+      matrix
     else
       raise "Matrix not found: #{ dataset }" unless File.exists?(dataset)
       format = TSV.parse_header(dataset).key_field
 
       log :matrix, "Setting matrix for #{ dataset }"
-      Matrix.new Path.setup(dataset.dup), nil, nil, format
+      matrix = Matrix.new Path.setup(dataset.dup), nil, nil, format
+      matrix.subsets = dataset_info(dataset)[:subsets]
+      matrix
     end
   end
 
   helper :matrix_to_gene do |matrix, dataset|
     log :translating, "Translating #{ dataset } matrix to known gene ids"
     begin
-      matrix = matrix.to_gene(identifiers(dataset)) 
+      subsets = matrix.subsets
+      matrix.to_gene(identifiers(dataset)) 
     rescue FieldNotFoundError
       raise ParameterException, "Could not identify probes in #{ dataset }. Cannot translate to gene -- #{identifiers(dataset).find}"
     end 
   end
+
+
+  input :dataset, :string, "Dataset code", nil
+  task :dataset_info => :yaml do |dataset|
+    raise ParameterException, :dataset if dataset.nil?
+    GEO.dataset_info(dataset)
+  end
+
+  input :dataset, :string, "Dataset code", nil
+  task :platform => :string do |dataset|
+    GEO.dataset_info(dataset)[:platform]
+  end
+
+  input :platform, :string, "Platform code", nil
+  task :platform_info => :yaml do |platform|
+    GEO.platform_info(platform)
+  end
+
+
 
   input :query, :string, "Query"
   task :query => :array do |query|
@@ -204,4 +229,72 @@ module GEO
     matrix.barcode path, standard_deviations
   end
   export_asynchronous :barcode
+
+  input :dataset, :string, "Dataset"
+  input :to_gene, :boolean, "Transform to gene", true
+  task :signatures => :tsv do |dataset,to_gene|
+    subset_comparisons = GEO.dataset_comparisons dataset
+    comparison_jobs = {}
+    subset_comparisons.each do |subset,values|
+      values.each do |comparison,samples|
+        main, contrast = comparison
+        main_samples, contrast_sammples = samples
+        comparison_name = subset + ": " + [main, contrast] * " => "
+        comparison_jobs[comparison_name] = GEO.job(:differential, comparison_name, :dataset => dataset, :main => main_samples, :contrast => contrast_sammples, :to_gene => to_gene)
+      end
+    end
+
+    Misc.bootstrap comparison_jobs.values do |job|
+      job.produce
+    end
+
+
+    if to_gene
+      probe_id = "Ensembl Gene ID"
+    else
+      probe_id = GEO.dataset_key_field dataset
+    end
+
+    index_file = file('index')
+    database = Persist.open_tokyocabinet index_file, true, :flat, "HDB"
+    TSV.setup(database, :key_field => "Signature", :fields => [probe_id], :type => :flat, :unnamed => true, :namepace => GEO.dataset_organism_code(dataset))
+    comparison_jobs.each do |name,job|
+      database[name] = job.load.sort_by("t.values").collect{|k,v| k}
+    end
+
+    database.read
+
+    database.to_s
+  end
+
+  dep :signatures
+  input :dataset, :string, "Dataset"
+  input :up_genes, :array, "Up genes"
+  input :down_genes, :array, "Down genes"
+  input :permutations, :integer, "Number of permutation", 100_000
+  task :rank_query => :tsv do |dataset,up_genes,down_genes,permutations|
+    signature_job = step(:signatures)
+    to_gene = signature_job.inputs[:to_gene]
+
+    if to_gene
+      index = Organism.identifiers(organism).index :target => "Ensembl Gene ID", :persist  => true, :order => true
+      up = index.chunked_values_at(up_genes) if up_genes
+      down = index.chunked_values_at(down_genes) if down_genes
+    else
+      up = up_genes
+      down = down_genes
+    end
+
+    index_file = signature_job.file('index')
+    database = Persist.open_tokyocabinet index_file, false, :flat, "HDB"
+    TSV.setup(database)
+
+    dumper = TSV::Dumper.new :key_field => "Signature", :fields => ["P-value"], :type => :single
+    dumper.init
+    TSV.traverse database, :cpus => 1, :into => dumper do |signature, list|
+      list = OrderedList.setup(list)
+      pvalue = list.pvalue(up, 0.2, :persist_permutations => true, :permutations => permutations)
+      [signature, pvalue]
+    end
+  end
 end

@@ -84,7 +84,7 @@ module GEO
     YAML.load(self[dataset]['info.yaml'].produce.read)
   end
 
-  def self.is_control?(value, info)
+  def self.is_control?(value)
     value.to_s.downcase =~ /\bcontrol\b/ or
     value.to_s.downcase =~ /\bwild/ or
     value.to_s.downcase =~ /\bnone\b/ 
@@ -96,7 +96,7 @@ module GEO
 
     control_samples = []
     subsets.each do |type, values|
-      control_samples.concat values.select{|value,samples| is_control? value, info}.collect{|value,samples| samples.split(",")}.flatten 
+      control_samples.concat values.select{|value,samples| is_control? value}.collect{|value,samples| samples.split(",")}.flatten 
     end
 
     control_samples
@@ -252,7 +252,7 @@ module GEO
       info[:data_directory] = directory
 
       Log.medium "Producing code file for #{ platform }"
-      codes = TSV.open stream, :fix => proc{|l| l =~ /^!platform_table_end/i ? nil : l}, :header_hash => ""
+      codes = TSV.open stream, :fix => proc{|l| l =~ /^!platform_table_end/i ? nil : l}, :header_hash => "", :sep2 => /\s*[|,]\s*/
       Log.low "Original fields: #{codes.key_field} - #{codes.fields * ", "}"
 
       best_field, all_new_fields, order = guess_id(Organism.default_code(Organism.organism(info[:organism])), codes)
@@ -411,6 +411,65 @@ module GEO
     end
 
     GE.analyze(value_file, condition_samples, control_samples, log2, path, format)
+  end
+
+  def self.comparisons(all_conditions, controls)
+    rest = all_conditions - controls
+    comparisons = []
+
+    if controls.any?
+      controls.each do |control|
+        rest.each do |ccase|
+          comparisons << [ccase, control]
+        end
+      end
+    else
+      rest.each do |control|
+        rest.each do |ccase|
+          next if ccase == control
+          comparisons << [ccase, control]
+        end
+      end
+    end
+    comparisons
+  end
+
+  def self.subset_comparisons(subsets)
+    subset_comparisons = {}
+    subsets.each do |subset,values|
+      all_conditions = values.keys
+      controls = all_conditions.select do |field| GEO.is_control? field end
+      comparisons = GEO.comparisons all_conditions, controls
+
+      subset_comparisons[subset] = {}
+      comparisons.each do |ccase,control|
+        case_samples = values[ccase]
+        control_samples = values[control]
+        case_samples = case_samples.split(",") if String === case_samples
+        control_samples = control_samples.split(",") if String === control_samples
+        next unless case_samples.length > 2 or control_samples.length > 2
+        subset_comparisons[subset][[ccase,control]] = [case_samples, control_samples]
+      end
+    end
+
+    subset_comparisons
+  end
+
+  def self.platform_key_field(platform)
+    TSV.parse_header(GEO[platform].codes.produce.find).key_field
+  end
+
+  def self.dataset_key_field(database)
+    platform_key_field dataset_info(database)[:platform]
+  end
+
+  def self.dataset_organism_code(dataset)
+    info = dataset_info dataset
+    Organism.default_code(Organism.organism(info[:organism]))
+  end
+  
+  def self.dataset_comparisons(dataset)
+    subset_comparisons dataset_info(dataset)[:subsets]
   end
 end
 
