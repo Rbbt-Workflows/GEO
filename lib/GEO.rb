@@ -12,6 +12,10 @@ module GEO
 
   GEO.claim GEO.root, :rake, Rbbt.share.install.GEO.Rakefile.find(:lib)
 
+  def self.dataset_comparison_dir
+    GEO.custom_dataset_comparisons.find
+  end
+
   def self.esearch(query)
     url="http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     params = {
@@ -439,6 +443,7 @@ module GEO
     subsets.each do |subset,values|
       all_conditions = values.keys
       controls = all_conditions.select do |field| GEO.is_control? field end
+
       comparisons = GEO.comparisons all_conditions, controls
 
       subset_comparisons[subset] = {}
@@ -469,7 +474,47 @@ module GEO
   end
   
   def self.dataset_comparisons(dataset)
-    subset_comparisons dataset_info(dataset)[:subsets]
+    subsets = dataset_info(dataset)[:subsets]
+    if GEO.dataset_comparison_dir[dataset].exists?
+      comparisons = {}
+      GEO.dataset_comparison_dir[dataset].read.split("\n").each do |line|
+        next if line.empty? or line[0] == "#"
+        subset, _sep, comparison = line.partition(":")
+        comparisons[subset] ||= {}
+        main, _sep, contrast = comparison.strip.partition(" vs ")
+        main.strip!
+        contrast.strip!
+
+        if main =~ /(.*-)?\[(.*)\]/
+          name, str = [$1, $2]
+          str, name = name, nil if str.nil?
+          main = name || 'main'
+          main.sub!(/-$/,'')
+          main_samples = str.split(/,\s*/)
+        else
+          main_samples = subsets[subset][main].split ","
+        end
+
+        if contrast =~ /(.*-)?\[(.*)\]/
+          name, str = [$1, $2]
+          str, name = name, nil if str.nil?
+          contrast = name || 'contrast'
+          contrast.sub!(/-$/,'')
+          contrast_samples = str.split(/,\s*/)
+        else
+          contrast_samples = subsets[subset][contrast].split ","
+        end
+
+
+
+
+        comparisons[subset][[main,contrast]]=[main_samples,contrast_samples]
+      end
+      iii comparisons
+      comparisons
+    else
+      subset_comparisons subsets
+    end
   end
 end
 

@@ -234,6 +234,7 @@ module GEO
   input :to_gene, :boolean, "Transform to gene", true
   task :signatures => :tsv do |dataset,to_gene|
     subset_comparisons = GEO.dataset_comparisons dataset
+
     comparison_jobs = {}
     subset_comparisons.each do |subset,values|
       values.each do |comparison,samples|
