@@ -267,7 +267,9 @@ module GEO
     database.to_s
   end
 
-  dep :signatures
+  dep GEO, :signatures do |jobname,options|
+    GEO.job(:signatures, "Basic Signatures", options)
+  end
   input :dataset, :string, "Dataset"
   input :up_genes, :array, "Up genes"
   input :down_genes, :array, "Down genes"
@@ -277,7 +279,7 @@ module GEO
     to_gene = signature_job.inputs[:to_gene]
 
     if to_gene
-      index = Organism.identifiers(organism).index :target => "Ensembl Gene ID", :persist  => true, :order => true
+      index = Organism.identifiers(organism).index :target => "Ensembl Gene ID", :persist  => true, :order => true, :unnamed => true
       up = index.chunked_values_at(up_genes) if up_genes
       down = index.chunked_values_at(down_genes) if down_genes
     else
@@ -289,12 +291,43 @@ module GEO
     database = Persist.open_tokyocabinet index_file, false, :flat, "HDB"
     TSV.setup(database)
 
-    dumper = TSV::Dumper.new :key_field => "Signature", :fields => ["P-value"], :type => :single
+    dumper = TSV::Dumper.new :key_field => "Signature", :fields => ["P-value", "Hits"], :type => :double
     dumper.init
-    TSV.traverse database, :cpus => 1, :into => dumper do |signature, list|
+    FileUtils.mkdir_p files_dir
+    TSV.traverse database, :cpus => 1, :into => dumper, :bar => true do |signature, list|
       list = OrderedList.setup(list)
+      img_width ||= list.length / 100
       pvalue = list.pvalue(up, 0.2, :persist_permutations => true, :permutations => permutations)
-      [signature, pvalue]
+      matches = (list & up)
+      list.draw_hits(up, file(signature + '.png'), :width => img_width)
+      [signature, [pvalue, matches]]
     end
+  end
+
+
+
+  dep GEO, :rank_query do |jobname, options|
+    jobs = options[:datasets].collect do |dataset|
+      GEO.job(:rank_query, jobname + ": " + dataset, options.merge(:dataset => dataset))
+    end
+    Misc.bootstrap jobs, 10 do |job|
+      job.produce
+    end
+    jobs
+  end
+  input :datasets, :array, "List of GDS"
+  task :rank_query_batch => :tsv do
+    res = TSV.setup({}, :key_field => "Signature", :fields => ["P-value", "Hits"], :type => :single, :unnamed => true)
+
+    dependencies.each do |job|
+      partial_res = job.load
+      dataset = job.inputs[:dataset]
+      partial_res.each do |signature, value|
+        signature = dataset + ": " + signature
+        res[signature] = value
+      end
+    end
+
+    res
   end
 end
