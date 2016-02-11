@@ -298,14 +298,18 @@ module GEO
     TSV.traverse database, :cpus => 1, :into => dumper, :bar => true do |signature, list|
       list = OrderedList.setup(list)
       img_width ||= list.length / 100
-      pvalue = list.pvalue(up, 0.2, :persist_permutations => true, :permutations => permutations)
-      matches = (list & up)
+      if down_genes.nil? or down_genes.empty?
+        pvalue = list.pvalue(up, 0.2, :persist_permutations => true, :permutations => permutations)
+        matches = (list & up)
+      else
+        pvalue = list.pvalue_up_down(up, down, 0.2, :persist_permutations => true, :permutations => permutations)
+        matches = (list & (up + down))
+      end
       list.draw_hits(up, file(signature + '.png'), :width => img_width)
       [signature, [pvalue, matches]]
     end
   end
-
-
+  export_asynchronous :rank_query
 
   dep GEO, :rank_query do |jobname, options|
     jobs = options[:datasets].collect do |dataset|
@@ -331,4 +335,5 @@ module GEO
 
     res
   end
+  export_asynchronous :rank_query_batch
 end
