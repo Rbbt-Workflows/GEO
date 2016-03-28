@@ -1,0 +1,16 @@
+- if job 
+  .job_control
+    = workflow_partial('job_result/job_control', workflow, task, locals)
+
+- tsv = job.load
+- organism = Organism.default_code("Hsa")
+
+=table :table_id => "Up-regulated genes" do
+  - tsv.key_field = "Ensembl Gene ID" unless Entity.formats.include? tsv.key_field
+  - tsv.select('p.values'){|v| v = v.to_f; v > 0}
+
+=table :table_id => "Down-regulated genes" do
+  - tsv.key_field = "Ensembl Gene ID" unless Entity.formats.include? tsv.key_field
+  - new = tsv.annotate({})
+  - tsv.each do |k,v| new[k] = v.collect{|_v| - _v.to_f } end
+  - new.select('p.values'){|v| v > 0}
