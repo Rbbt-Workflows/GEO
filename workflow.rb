@@ -74,7 +74,6 @@ module GEO
   helper :matrix_to_gene do |matrix, dataset|
     log :translating, "Translating #{ dataset } matrix to known gene ids"
     begin
-      subsets = matrix.subsets
       matrix.to_gene(identifiers(dataset)) 
     rescue FieldNotFoundError
       raise ParameterException, "Could not identify probes in #{ dataset }. Cannot translate to gene -- #{identifiers(dataset).find}"
