@@ -1,6 +1,5 @@
 # encoding: utf-8
 require 'rbbt-util'
-require 'rbbt/GE'
 require 'rbbt/sources/organism'
 require 'rbbt/resource'
 require 'yaml'

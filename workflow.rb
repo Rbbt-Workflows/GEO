@@ -1,6 +1,5 @@
 require 'rbbt-util'
 require 'rbbt/workflow'
-require 'rbbt/GE'
 require 'GEO'
 
 require 'rbbt/matrix'
