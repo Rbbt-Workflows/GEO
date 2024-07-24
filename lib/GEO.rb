@@ -271,7 +271,6 @@ module GEO
 
         Log.low "Original fields: #{codes.key_field} - #{codes.fields * ", "}"
 
-        iii info
         best_field, all_new_fields, order = guess_id(Organism.default_code(Organism.organism(info[:organism])), codes)
 
         new_key_field, *new_fields = all_new_fields
@@ -332,8 +331,6 @@ module GEO
         TSV.open stream, :fix => proc{|l| l =~ /^!dataset_table_end/i ? nil : l.gsub(/null/,'NA')}, :header_hash => "", :type => :list
       end
 
-      iii platform
-      iii GEO[platform].codes
       key_field = TSV.parse_header(GEO[platform].codes.produce.find).key_field
       values.key_field = key_field
 
@@ -531,7 +528,6 @@ module GEO
 
         comparisons[subset][[main,contrast]]=[main_samples,contrast_samples]
       end
-      iii comparisons
       comparisons
     else
       subset_comparisons subsets
