@@ -10,8 +10,12 @@ require 'rbbt/statistics/random_walk'
 module GEO
   extend Workflow
 
-  helper :organism do
-    Organism.default_code("Hsa")
+  helper :organism do |dataset|
+    if dataset
+      Organism.default_code(GEO.dataset_organism_code(dataset))
+    else
+      Organism.default_code("Hsa")
+    end
   end
 
   helper :dataset_info do |dataset|
@@ -23,7 +27,7 @@ module GEO
       platform = dataset_info(dataset)[:platform]
       GEO[platform].codes
     else
-      Organism.identifiers(organism)
+      Organism.identifiers(organism(dataset))
     end
   end
 
@@ -38,7 +42,7 @@ module GEO
       end
     end
 
-    index ||= Organism.identifiers(organism).index :target => format, :persist => true
+    index ||= identifiers(dataset).index :target => format, :persist => true
 
     keys.collect{|k| index[k] }
   end
@@ -53,19 +57,19 @@ module GEO
       platform = dataset_info[:platform]
       format     = GEO[platform].codes.open{|io| TSV.parse_header(io).key_field } 
 
-      log :geo, "Processing #{ dataset } files from GEO" unless File.exists?(GEO[dataset].values.find)
+      log :geo, "Processing #{ dataset } files from GEO" unless File.exist?(GEO[dataset].values.find)
       data = GEO[dataset].values 
 
       log :matrix, "Setting matrix for #{ dataset }"
-      matrix = Matrix.new data.find.produce, samples, value_type, format
+      matrix = RbbtMatrix.new data.find.produce, samples, value_type, format, organism(dataset)
       matrix.subsets = dataset_info(dataset)[:subsets]
       matrix
     else
-      raise "Matrix not found: #{ dataset }" unless File.exists?(dataset)
+      raise "Matrix not found: #{ dataset }" unless File.exist?(dataset)
       format = TSV.parse_header(dataset).key_field
 
       log :matrix, "Setting matrix for #{ dataset }"
-      matrix = Matrix.new Path.setup(dataset.dup), nil, nil, format
+      matrix = RbbtMatrix.new Path.setup(dataset.dup), nil, nil, format
       matrix.subsets = dataset_info(dataset)[:subsets]
       matrix
     end
@@ -74,7 +78,7 @@ module GEO
   helper :matrix_to_gene do |matrix, dataset|
     log :translating, "Translating #{ dataset } matrix to known gene ids"
     begin
-      matrix.to_gene(identifiers(dataset)) 
+      matrix.to_name(identifiers(dataset)) 
     rescue FieldNotFoundError
       raise ParameterException, "Could not identify probes in #{ dataset }. Cannot translate to gene -- #{identifiers(dataset).find}"
     end 
@@ -151,7 +155,7 @@ module GEO
 
     matrix = matrix_to_gene matrix, dataset if to_gene
 
-    FileUtils.cp matrix.data_file, path
+    Open.cp matrix.data_file, self.tmp_path
   end
   export_asynchronous :matrix
 
@@ -189,13 +193,13 @@ module GEO
   returns "Ensembl Gene ID"
   task :up_genes => :array do |threshold|
     diff = step(:differential).load
-    dataset = step(:differential).info[:inputs][:dataset]
-    to_gene = step(:differential).info[:inputs][:to_gene]
+    dataset = step(:differential).inputs[:dataset]
+    to_gene = step(:differential).inputs[:to_gene]
 
     diff.unnamed = true
     keys = diff.select("adjusted.p.values"){|p| p > 0 and p < threshold }.keys
 
-    to_gene ? translate(dataset, keys, "Ensembl Gene ID") : keys
+    to_gene ? translate(dataset, keys, "Associated Gene Name") : keys
   end
   export_asynchronous :up_genes
 
@@ -204,13 +208,13 @@ module GEO
   returns "Ensembl Gene ID"
   task :down_genes => :array do |threshold|
     diff = step(:differential).load
-    dataset = step(:differential).info[:inputs][:dataset]
-    to_gene = step(:differential).info[:inputs][:to_gene]
+    dataset = step(:differential).inputs[:dataset]
+    to_gene = step(:differential).inputs[:to_gene]
 
     diff.unnamed = true
     keys = diff.select("adjusted.p.values"){|p| p < 0 and p.abs < threshold }.keys
 
-    to_gene ? translate(dataset, keys, "Ensembl Gene ID") : keys
+    to_gene ? translate(dataset, keys, "Associated Gene Name") : keys
   end
   export_asynchronous :down_genes
 

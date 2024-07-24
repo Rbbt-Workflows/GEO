@@ -107,9 +107,14 @@ module GEO
 
   module SOFT
 
-    GDS_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/GDS/#DATASET#.soft.gz"
-    GPL_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/by_platform/#PLATFORM#/#PLATFORM#_family.soft.gz"
-    GSE_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/by_series/#SERIES#/#SERIES#_family.soft.gz"
+    #GDS_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/GDS/#DATASET#.soft.gz"
+    GDS_URL="https://ftp.ncbi.nlm.nih.gov/geo/datasets/GDSnnn/#DATASET#/soft/#DATASET#.soft.gz"
+
+    #GPL_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/by_platform/#PLATFORM#/#PLATFORM#_family.soft.gz"
+    GPL_URL="https://ftp.ncbi.nlm.nih.gov/geo/platforms/GPLnnn/#PLATFORM#/soft/#PLATFORM#_family.soft.gz"
+
+    #GSE_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/by_series/#SERIES#/#SERIES#_family.soft.gz"
+    GSE_URL="https://ftp.ncbi.nlm.nih.gov/geo/series/GSE1nnn/#SERIES#/soft/#SERIES#_family.soft.gz"
 
     GSE_INFO = {
       :DELIMITER        => "\\^PLATFORM",
@@ -241,38 +246,48 @@ module GEO
     #{{{ GPL
 
     def self.GPL(platform, directory)
-      FileUtils.mkdir_p directory unless File.exists? directory
+      FileUtils.mkdir_p directory unless Open.exist? directory
 
       code_file = File.join(directory, 'codes') 
       info_file = File.join(directory, 'info.yaml') 
 
-      # Fix platforms with the '.\d' extension (eg. NM_020527.1)
-      stream = CMD.cmd('sed \'s/\.[[:digit:]]\+\(\t\|$\)/\1/g;s/ *\/\/[^\t]*//g\'', :in =>  Open.open(GPL_URL.gsub('#PLATFORM#', platform), :nocache => true), :pipe => true)
+      original = File.join(directory, 'original.gz') 
+      url = GPL_URL.gsub("#PLATFORM#", platform)
 
-      info = parse_header(stream, GPL_INFO)
+      Open.download(url, original) unless Open.exists?(original)
 
-      info[:code_file]      = code_file
-      info[:data_directory] = directory
+      Open.open(original) do |original_stream|
+        # Fix platforms with the '.\d' extension (eg. NM_020527.1)
+        stream = CMD.cmd('sed \'s/\.[[:digit:]]\+\(\t\|$\)/\1/g;s/ *\/\/[^\t]*//g\'', :in =>  original_stream, :pipe => true, nofail: true)
 
-      Log.medium "Producing code file for #{ platform }"
-      codes = TSV.open stream, :fix => proc{|l| l =~ /^!platform_table_end/i ? nil : l}, :header_hash => "", :sep2 => /\s*[|,]\s*/
-      Log.low "Original fields: #{codes.key_field} - #{codes.fields * ", "}"
+        info = parse_header(stream, GPL_INFO)
 
-      best_field, all_new_fields, order = guess_id(Organism.default_code(Organism.organism(info[:organism])), codes)
+        info[:code_file]      = code_file
+        info[:data_directory] = directory
 
-      new_key_field, *new_fields = all_new_fields
+        Log.medium "Producing code file for #{ platform }"
+        codes = TSV.open(stream, :fix => proc{|l| l =~ /^!platform_table_end/i ? :break : l }, :header_hash => "", :sep2 => /\s*[|,]\s*/)
+        Log.tsv codes
 
-      new_key_field = codes.key_field if new_key_field =~ /^UNKNOWN/
+        Log.low "Original fields: #{codes.key_field} - #{codes.fields * ", "}"
 
-      codes.key_field = new_key_field.dup 
-      codes.fields = new_fields.collect{|f| f.dup}
+        iii info
+        best_field, all_new_fields, order = guess_id(Organism.default_code(Organism.organism(info[:organism])), codes)
 
-      Log.low "New fields: #{codes.key_field} - #{codes.fields * ", "}"
+        new_key_field, *new_fields = all_new_fields
 
-      Open.write(code_file, codes.reorder(:key, order).to_s(:sort))
-      Open.write(info_file, info.to_yaml)
+        new_key_field = codes.key_field if new_key_field =~ /^UNKNOWN/
 
-      info
+        codes.key_field = new_key_field.dup 
+        codes.fields = new_fields.collect{|f| f.dup}
+
+        Log.low "New fields: #{codes.key_field} - #{codes.fields * ", "}"
+
+        Open.write(code_file, codes.reorder(:key, order).to_s(:sort))
+        Open.write(info_file, info.to_yaml)
+
+        info
+      end
     end
 
     def self.dataset_subsets(stream)
@@ -298,22 +313,27 @@ module GEO
     end
 
     def self.GDS(dataset, directory)
-      FileUtils.mkdir_p directory unless File.exists? directory
+      FileUtils.mkdir_p directory unless File.exist? directory
       
       value_file = File.join(directory, 'values') 
       info_file = File.join(directory, 'info.yaml') 
 
-      stream = Open.open(GDS_URL.gsub('#DATASET#', dataset), :nocache => true)
+      platform = info = nil
+      values = Open.open(GDS_URL.gsub('#DATASET#', dataset)) do |stream|
 
-      info = parse_header(stream, GDS_INFO)
-      info[:value_file]      = value_file
-      info[:data_directory] = directory
+        info = parse_header(stream, GDS_INFO)
+        info[:value_file]      = value_file
+        info[:data_directory] = directory
 
-      info[:subsets] = dataset_subsets(stream)
-      platform = info[:platform]
+        info[:subsets] = dataset_subsets(stream)
+        platform = info[:platform]
 
-      Log.medium "Producing values file for #{ dataset }"
-      values = TSV.open stream, :fix => proc{|l| l =~ /^!dataset_table_end/i ? nil : l.gsub(/null/,'NA')}, :header_hash => "", :type => :list
+        Log.medium "Producing values file for #{ dataset }"
+        TSV.open stream, :fix => proc{|l| l =~ /^!dataset_table_end/i ? nil : l.gsub(/null/,'NA')}, :header_hash => "", :type => :list
+      end
+
+      iii platform
+      iii GEO[platform].codes
       key_field = TSV.parse_header(GEO[platform].codes.produce.find).key_field
       values.key_field = key_field
 
@@ -358,7 +378,7 @@ module GEO
     end
 
     def self.GSE(series, directory)
-      FileUtils.mkdir_p directory unless File.exists? directory
+      FileUtils.mkdir_p directory unless File.exist? directory
 
       value_file = File.join(directory, 'values') 
       info_file = File.join(directory, 'info.yaml') 
@@ -469,6 +489,8 @@ module GEO
 
   def self.dataset_organism_code(dataset)
     info = dataset_info dataset
+    platform = info[:platform]
+    info = platform_info platform
     Organism.default_code(Organism.organism(info[:organism]))
   end
   
