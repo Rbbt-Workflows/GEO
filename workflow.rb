@@ -110,7 +110,7 @@ module GEO
   end
   export_asynchronous :query
   
-  input :dataset, :string, "Dataset code", nil
+  input :dataset, :string, "Dataset", nil, :jobname => true
   task :sample_info => :tsv do |dataset|
     dataset_info = dataset_info dataset
 
@@ -147,7 +147,7 @@ module GEO
   end
   export_asynchronous :sample_info
 
-  input :dataset, :string, "Dataset code", nil
+  input :dataset, :string, "Dataset", nil, :jobname => true
   input :to_gene, :boolean, "Average probes by gene", false
   task :matrix => :tsv do |dataset,to_gene|
     raise ParameterException, "No dataset provided" if dataset.nil?
@@ -159,8 +159,8 @@ module GEO
   end
   export_asynchronous :matrix
 
-  input :dataset, :string, "Dataset code", nil
-  input :main, :string, "Main samples", nil
+  input :dataset, :string, "Dataset", nil, :jobname => true
+  input :main, :string, "Main samples", nil, required: true
   input :contrast, :string, "Contrat samples", nil
   input :to_gene, :boolean, "Average probes by gene", false
   task :differential => :tsv do |dataset,main, contrast,to_gene|
@@ -219,7 +219,7 @@ module GEO
   export_asynchronous :down_genes
 
 
-  input :dataset, :string, "Dataset code", nil
+  input :dataset, :string, "Dataset", nil, :jobname => true
   input :to_gene, :boolean, "Average probes by gene", false
   input :standard_deviations, :float, "Standard deviations from the lower mode", 2
   task :barcode => :tsv do |dataset,to_gene, standard_deviations|
@@ -232,7 +232,7 @@ module GEO
   end
   export_asynchronous :barcode
 
-  input :dataset, :string, "Dataset"
+  input :dataset, :string, "Dataset", nil, :jobname => true
   input :to_gene, :boolean, "Transform to gene", true
   task :signatures => :tsv do |dataset,to_gene|
     subset_comparisons = GEO.dataset_comparisons dataset
@@ -241,15 +241,15 @@ module GEO
     subset_comparisons.each do |subset,values|
       values.each do |comparison,samples|
         main, contrast = comparison
-        main_samples, contrast_sammples = samples
+        main_samples, contrast_samples = samples
         comparison_name = subset + ": " + [main, contrast] * " => "
-        comparison_jobs[comparison_name] = GEO.job(:differential, comparison_name, :dataset => dataset, :main => main_samples, :contrast => contrast_sammples, :to_gene => to_gene)
+        comparison_jobs[comparison_name] = GEO.job(:differential, comparison_name, :dataset => dataset, :main => main_samples, :contrast => contrast_samples, :to_gene => to_gene)
       end
     end
 
     Misc.bootstrap comparison_jobs.values do |job|
       job.produce
-    end
+    end if comparison_jobs.any?
 
 
     if to_gene
@@ -273,7 +273,7 @@ module GEO
   dep GEO, :signatures do |jobname,options|
     GEO.job(:signatures, "Basic Signatures", options)
   end
-  input :dataset, :string, "Dataset"
+  input :dataset, :string, "Dataset", nil, :jobname => true
   input :up_genes, :array, "Up genes"
   input :down_genes, :array, "Down genes"
   input :permutations, :integer, "Number of permutation", 100_000

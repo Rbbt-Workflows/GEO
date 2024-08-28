@@ -108,13 +108,13 @@ module GEO
   module SOFT
 
     #GDS_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/GDS/#DATASET#.soft.gz"
-    GDS_URL="https://ftp.ncbi.nlm.nih.gov/geo/datasets/GDSnnn/#DATASET#/soft/#DATASET#.soft.gz"
+    GDS_URL="https://ftp.ncbi.nlm.nih.gov/geo/datasets/GDS#NUM#/#DATASET#/soft/#DATASET#.soft.gz"
 
     #GPL_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/by_platform/#PLATFORM#/#PLATFORM#_family.soft.gz"
-    GPL_URL="https://ftp.ncbi.nlm.nih.gov/geo/platforms/GPLnnn/#PLATFORM#/soft/#PLATFORM#_family.soft.gz"
+    GPL_URL="https://ftp.ncbi.nlm.nih.gov/geo/platforms/GPL#NUM#/#PLATFORM#/soft/#PLATFORM#_family.soft.gz"
 
     #GSE_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/by_series/#SERIES#/#SERIES#_family.soft.gz"
-    GSE_URL="https://ftp.ncbi.nlm.nih.gov/geo/series/GSE1nnn/#SERIES#/soft/#SERIES#_family.soft.gz"
+    GSE_URL="https://ftp.ncbi.nlm.nih.gov/geo/series/GSE1#NUM#/#SERIES#/soft/#SERIES#_family.soft.gz"
 
     GSE_INFO = {
       :DELIMITER        => "\\^PLATFORM",
@@ -252,7 +252,7 @@ module GEO
       info_file = File.join(directory, 'info.yaml') 
 
       original = File.join(directory, 'original.gz') 
-      url = GPL_URL.gsub("#PLATFORM#", platform)
+      url = self.make_url(GPL_URL, "PLATFORM", platform)
 
       Open.download(url, original) unless Open.exists?(original)
 
@@ -267,7 +267,6 @@ module GEO
 
         Log.medium "Producing code file for #{ platform }"
         codes = TSV.open(stream, :fix => proc{|l| l =~ /^!platform_table_end/i ? :break : l }, :header_hash => "", :sep2 => /\s*[|,]\s*/)
-        Log.tsv codes
 
         Log.low "Original fields: #{codes.key_field} - #{codes.fields * ", "}"
 
@@ -311,6 +310,17 @@ module GEO
       info
     end
 
+    def self.make_url(url, type, obj)
+      url = url.gsub("#" + type + "#", obj)
+      num = obj.scan(/\d+/).first
+      l = num.length
+      if l > 3
+        url.gsub("#NUM#", num[0..l-4] + 'nnn')
+      else
+        url.gsub("#NUM#", 'nnn')
+      end
+    end
+
     def self.GDS(dataset, directory)
       FileUtils.mkdir_p directory unless File.exist? directory
       
@@ -318,7 +328,7 @@ module GEO
       info_file = File.join(directory, 'info.yaml') 
 
       platform = info = nil
-      values = Open.open(GDS_URL.gsub('#DATASET#', dataset)) do |stream|
+      values = Open.open(make_url(GDS_URL, 'DATASET', dataset)) do |stream|
 
         info = parse_header(stream, GDS_INFO)
         info[:value_file]      = value_file
@@ -380,7 +390,7 @@ module GEO
       value_file = File.join(directory, 'values') 
       info_file = File.join(directory, 'info.yaml') 
 
-      stream = Open.open(GSE_URL.gsub('#SERIES#', series), :nocache => true)
+      stream = Open.open(self.make_url(GSE_URL, 'SERIES', series), :nocache => true)
 
       info = parse_header(stream, GSE_INFO)
       info[:value_file]      = value_file
