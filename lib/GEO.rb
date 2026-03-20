@@ -114,7 +114,7 @@ module GEO
     GPL_URL="https://ftp.ncbi.nlm.nih.gov/geo/platforms/GPL#NUM#/#PLATFORM#/soft/#PLATFORM#_family.soft.gz"
 
     #GSE_URL="ftp://ftp.ncbi.nih.gov/pub/geo/DATA/SOFT/by_series/#SERIES#/#SERIES#_family.soft.gz"
-    GSE_URL="https://ftp.ncbi.nlm.nih.gov/geo/series/GSE1#NUM#/#SERIES#/soft/#SERIES#_family.soft.gz"
+    GSE_URL="https://ftp.ncbi.nlm.nih.gov/geo/series/GSE#NUM#/#SERIES#/soft/#SERIES#_family.soft.gz"
 
     GSE_INFO = {
       :DELIMITER        => "\\^PLATFORM",
@@ -256,7 +256,7 @@ module GEO
 
       Open.download(url, original) unless Open.exists?(original)
 
-      Open.open(original) do |original_stream|
+      Open.open(original, no_fail: true) do |original_stream|
         # Fix platforms with the '.\d' extension (eg. NM_020527.1)
         stream = CMD.cmd('sed \'s/\.[[:digit:]]\+\(\t\|$\)/\1/g;s/ *\/\/[^\t]*//g\'', :in =>  original_stream, :pipe => true, nofail: true)
 
@@ -341,7 +341,8 @@ module GEO
         TSV.open stream, :fix => proc{|l| l =~ /^!dataset_table_end/i ? nil : l.gsub(/null/,'NA')}, :header_hash => "", :type => :list
       end
 
-      key_field = TSV.parse_header(GEO[platform].codes.produce.find).key_field
+      file = GEO[platform].codes.produce.find
+      key_field = TSV.parse_header(file).key_field
       values.key_field = key_field
 
       samples = values.fields.select{|f| f =~ /GSM/}
