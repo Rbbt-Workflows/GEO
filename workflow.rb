@@ -197,7 +197,7 @@ module GEO
     to_gene = step(:differential).inputs[:to_gene]
 
     diff.unnamed = true
-    keys = diff.select("adjusted.p.values"){|p| p > 0 and p < threshold }.keys
+    keys = diff.select("adjusted.p.values"){|p| p.to_f > 0 and p.to_f.abs < threshold }.keys
 
     to_gene ? translate(dataset, keys, "Associated Gene Name") : keys
   end

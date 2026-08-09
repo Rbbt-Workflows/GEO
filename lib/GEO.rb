@@ -16,7 +16,7 @@ module GEO
   end
 
   def self.esearch(query)
-    url="http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+    url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     params = {
       :db => "gds",
       :term => query + " AND gds[filter]",
@@ -30,7 +30,7 @@ module GEO
   end
 
   def self.efetch(query)
-    url="http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+    url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
     params = {
       :db => "gds",
       :term => query + " AND gds[filter]",
@@ -44,7 +44,7 @@ module GEO
   end
 
   def self.esummary(query_key,web_env)
-    url="http://eutils.ncbi.nlm.nih.gov/entrez/eutils/summary.fcgi"
+    url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/summary.fcgi"
     params = {
       :db => "gds",
       :query_key => query_key,
@@ -199,6 +199,7 @@ module GEO
 
     def self.parse_header(stream, info)
       header = ""
+      
       while line = stream.readline
         line = Misc.fixutf8 line
         header << line
